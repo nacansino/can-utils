@@ -493,7 +493,7 @@ int main(int argc, char **argv)
     addr.can_family = AF_CAN;
 
     memset(&ifr.ifr_name, 0, sizeof(ifr.ifr_name));
-    strncpy(ifr.ifr_name, ptr, nbytes);
+    memcpy((void*)ifr.ifr_name, (void*)ptr, nbytes);
 
 #ifdef DEBUG
     printf("using interface name '%s'.\n", ifr.ifr_name);
