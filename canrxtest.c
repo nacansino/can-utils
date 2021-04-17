@@ -108,7 +108,6 @@ struct if_info { /* bundled information per open socket */
 	__u32 dropcnt;
 	__u32 last_dropcnt;
 };
-static struct if_info sock_info[MAXSOCK];
 static struct if_info sock_info_single;
 
 static char devname[MAXIFNAMES][IFNAMSIZ+1];
@@ -302,16 +301,13 @@ int main(int argc, char **argv)
 	int count = 0;
 	int rcvbuf_size = 0;
 	int opt, num_events;
-	int currmax, numfilter;
-	int join_filter;
-	char *ptr, *nptr;
+	int currmax;
+	char *ptr;
 	struct sockaddr_can addr;
 	char ctrlmsg[CMSG_SPACE(sizeof(struct timeval) + 3 * sizeof(struct timespec) + sizeof(__u32))];
 	struct iovec iov;
 	struct msghdr msg;
 	struct cmsghdr *cmsg;
-	struct can_filter *rfilter;
-	can_err_mask_t err_mask;
 	struct canfd_frame frame;
 	int nbytes, i, maxdlen;
 	struct ifreq ifr;
@@ -461,126 +457,126 @@ int main(int argc, char **argv)
 	}
 
 #ifdef MYTEST
-//	for (i = 0; i < currmax; i++) {
-		struct if_info* obj = &sock_info_single;
-		ptr = argv[1];  // first element
+    currmax = 1;
+
+    struct if_info* obj = &sock_info_single;
+    ptr = argv[1];  // first element
 
 #ifdef DEBUG
-		printf("open %d '%s'.\n", i, ptr);
+    printf("open %d '%s'.\n", i, ptr);
 #endif
 
-		obj->s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
-		if (obj->s < 0) {
-			perror("socket");
-			return 1;
-		}
+    obj->s = socket(PF_CAN, SOCK_RAW, CAN_RAW);
+    if (obj->s < 0) {
+        perror("socket");
+        return 1;
+    }
 
-		event_setup.data.ptr = obj; /* remember the instance as private data */
-		if (epoll_ctl(fd_epoll, EPOLL_CTL_ADD, obj->s, &event_setup)) {
-			perror("failed to add socket to epoll");
-			return 1;
-		}
+    event_setup.data.ptr = obj; /* remember the instance as private data */
+    if (epoll_ctl(fd_epoll, EPOLL_CTL_ADD, obj->s, &event_setup)) {
+        perror("failed to add socket to epoll");
+        return 1;
+    }
 
-		obj->cmdlinename = ptr; /* save pointer to cmdline name of this socket */
+    obj->cmdlinename = ptr; /* save pointer to cmdline name of this socket */
 
-        nbytes = strlen(ptr); /* no ',' found => no filter definitions */
+    nbytes = strlen(ptr); /* no ',' found => no filter definitions */
 
-		if (nbytes >= IFNAMSIZ) {
-			fprintf(stderr, "name of CAN device '%s' is too long!\n", ptr);
-			return 1;
-		}
+    if (nbytes >= IFNAMSIZ) {
+        fprintf(stderr, "name of CAN device '%s' is too long!\n", ptr);
+        return 1;
+    }
 
-		if (nbytes > max_devname_len)
-			max_devname_len = nbytes; /* for nice printing */
+    if (nbytes > max_devname_len)
+        max_devname_len = nbytes; /* for nice printing */
 
-		addr.can_family = AF_CAN;
+    addr.can_family = AF_CAN;
 
-		memset(&ifr.ifr_name, 0, sizeof(ifr.ifr_name));
-		strncpy(ifr.ifr_name, ptr, nbytes);
+    memset(&ifr.ifr_name, 0, sizeof(ifr.ifr_name));
+    strncpy(ifr.ifr_name, ptr, nbytes);
 
 #ifdef DEBUG
-		printf("using interface name '%s'.\n", ifr.ifr_name);
+    printf("using interface name '%s'.\n", ifr.ifr_name);
 #endif
 
-		if (strcmp(ANYDEV, ifr.ifr_name) != 0) {
-			if (ioctl(obj->s, SIOCGIFINDEX, &ifr) < 0) {
-				perror("SIOCGIFINDEX");
-				exit(1);
-			}
-			addr.can_ifindex = ifr.ifr_ifindex;
-		} else
-			addr.can_ifindex = 0; /* any can interface */
+    if (strcmp(ANYDEV, ifr.ifr_name) != 0) {
+        if (ioctl(obj->s, SIOCGIFINDEX, &ifr) < 0) {
+            perror("SIOCGIFINDEX");
+            exit(1);
+        }
+        addr.can_ifindex = ifr.ifr_ifindex;
+    } else
+        addr.can_ifindex = 0; /* any can interface */
 
-		/* try to switch the socket into CAN FD mode */
-		setsockopt(obj->s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &canfd_on, sizeof(canfd_on));
+    /* try to switch the socket into CAN FD mode */
+    setsockopt(obj->s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &canfd_on, sizeof(canfd_on));
 
-		if (rcvbuf_size) {
-			int curr_rcvbuf_size;
-			socklen_t curr_rcvbuf_size_len = sizeof(curr_rcvbuf_size);
+    if (rcvbuf_size) {
+        int curr_rcvbuf_size;
+        socklen_t curr_rcvbuf_size_len = sizeof(curr_rcvbuf_size);
 
-			/* try SO_RCVBUFFORCE first, if we run with CAP_NET_ADMIN */
-			if (setsockopt(obj->s, SOL_SOCKET, SO_RCVBUFFORCE,
-				       &rcvbuf_size, sizeof(rcvbuf_size)) < 0) {
+        /* try SO_RCVBUFFORCE first, if we run with CAP_NET_ADMIN */
+        if (setsockopt(obj->s, SOL_SOCKET, SO_RCVBUFFORCE,
+                    &rcvbuf_size, sizeof(rcvbuf_size)) < 0) {
 #ifdef DEBUG
-				printf("SO_RCVBUFFORCE failed so try SO_RCVBUF ...\n");
+            printf("SO_RCVBUFFORCE failed so try SO_RCVBUF ...\n");
 #endif
-				if (setsockopt(obj->s, SOL_SOCKET, SO_RCVBUF,
-					       &rcvbuf_size, sizeof(rcvbuf_size)) < 0) {
-					perror("setsockopt SO_RCVBUF");
-					return 1;
-				}
+            if (setsockopt(obj->s, SOL_SOCKET, SO_RCVBUF,
+                        &rcvbuf_size, sizeof(rcvbuf_size)) < 0) {
+                perror("setsockopt SO_RCVBUF");
+                return 1;
+            }
 
-				if (getsockopt(obj->s, SOL_SOCKET, SO_RCVBUF,
-					       &curr_rcvbuf_size, &curr_rcvbuf_size_len) < 0) {
-					perror("getsockopt SO_RCVBUF");
-					return 1;
-				}
+            if (getsockopt(obj->s, SOL_SOCKET, SO_RCVBUF,
+                        &curr_rcvbuf_size, &curr_rcvbuf_size_len) < 0) {
+                perror("getsockopt SO_RCVBUF");
+                return 1;
+            }
 
-				/* Only print a warning the first time we detect the adjustment */
-				/* n.b.: The wanted size is doubled in Linux in net/sore/sock.c */
-				if (curr_rcvbuf_size < rcvbuf_size * 2)
-					fprintf(stderr, "The socket receive buffer size was "
-						"adjusted due to /proc/sys/net/core/rmem_max.\n");
-			}
-		}
+            /* Only print a warning the first time we detect the adjustment */
+            /* n.b.: The wanted size is doubled in Linux in net/sore/sock.c */
+            if (curr_rcvbuf_size < rcvbuf_size * 2)
+                fprintf(stderr, "The socket receive buffer size was "
+                    "adjusted due to /proc/sys/net/core/rmem_max.\n");
+        }
+    }
 
-		if (timestamp || log || logfrmt) {
-			if (hwtimestamp) {
-				const int timestamping_flags = (SOF_TIMESTAMPING_SOFTWARE |
-								SOF_TIMESTAMPING_RX_SOFTWARE |
-								SOF_TIMESTAMPING_RAW_HARDWARE);
+    if (timestamp || log || logfrmt) {
+        if (hwtimestamp) {
+            const int timestamping_flags = (SOF_TIMESTAMPING_SOFTWARE |
+                            SOF_TIMESTAMPING_RX_SOFTWARE |
+                            SOF_TIMESTAMPING_RAW_HARDWARE);
 
-				if (setsockopt(obj->s, SOL_SOCKET, SO_TIMESTAMPING,
-					       &timestamping_flags, sizeof(timestamping_flags)) < 0) {
-					perror("setsockopt SO_TIMESTAMPING is not supported by your Linux kernel");
-					return 1;
-				}
-			} else {
-				const int timestamp_on = 1;
+            if (setsockopt(obj->s, SOL_SOCKET, SO_TIMESTAMPING,
+                        &timestamping_flags, sizeof(timestamping_flags)) < 0) {
+                perror("setsockopt SO_TIMESTAMPING is not supported by your Linux kernel");
+                return 1;
+            }
+        } else {
+            const int timestamp_on = 1;
 
-				if (setsockopt(obj->s, SOL_SOCKET, SO_TIMESTAMP,
-					       &timestamp_on, sizeof(timestamp_on)) < 0) {
-					perror("setsockopt SO_TIMESTAMP");
-					return 1;
-				}
-			}
-		}
+            if (setsockopt(obj->s, SOL_SOCKET, SO_TIMESTAMP,
+                        &timestamp_on, sizeof(timestamp_on)) < 0) {
+                perror("setsockopt SO_TIMESTAMP");
+                return 1;
+            }
+        }
+    }
 
-		if (dropmonitor) {
-			const int dropmonitor_on = 1;
+    if (dropmonitor) {
+        const int dropmonitor_on = 1;
 
-			if (setsockopt(obj->s, SOL_SOCKET, SO_RXQ_OVFL,
-				       &dropmonitor_on, sizeof(dropmonitor_on)) < 0) {
-				perror("setsockopt SO_RXQ_OVFL not supported by your Linux Kernel");
-				return 1;
-			}
-		}
+        if (setsockopt(obj->s, SOL_SOCKET, SO_RXQ_OVFL,
+                    &dropmonitor_on, sizeof(dropmonitor_on)) < 0) {
+            perror("setsockopt SO_RXQ_OVFL not supported by your Linux Kernel");
+            return 1;
+        }
+    }
 
-		if (bind(obj->s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-			perror("bind");
-			return 1;
-		}
-//	}
+    if (bind(obj->s, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        return 1;
+    }
 #else
 
 	for (i = 0; i < currmax; i++) {
