@@ -172,6 +172,7 @@ static void sigterm(int signo)
 	running = 0;
 }
 
+/**Converts idx to dindex... duh */
 static int idx2dindex(int ifidx, int socket)
 {
 
