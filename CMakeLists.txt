@@ -32,6 +32,7 @@ set(PROGRAMS_CANLIB
     cangen
     canlogserver
     canplayer
+    canrxtest
     cansend
     cansequence
     log2asc
